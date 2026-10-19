@@ -3,18 +3,19 @@
   "version": "1.0.0",
   "description": "Official TypeScript/JavaScript SDK for OnlyDNS System API (onlydns.com)",
   "main": "dist/index.js",
-  "module": "dist/index.mjs",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.mjs"
   },
   "keywords": [
     "onlydns",
