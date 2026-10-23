@@ -7,6 +7,11 @@
 
 export { OnlyDNSClient } from './client.js';
 export {
+  normalizeDomain,
+  normalizeRecordName,
+  normalizeRecordType,
+} from './utils.js';
+export {
   OnlyDNSError,
   AuthenticationError,
   NotFoundError,

@@ -5,6 +5,11 @@ import {
   OnlyDNSError,
   ValidationError,
 } from './errors.js';
+import {
+  normalizeDomain,
+  normalizeRecordName,
+  normalizeRecordType,
+} from './utils.js';
 import type {
   AddRecordOptions,
   APIErrorResponse,
@@ -73,7 +78,7 @@ export class OnlyDNSClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiToken}`,
       Accept: 'application/json',
-      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.0',
+      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.2',
     };
 
     if (body !== undefined) {
@@ -154,7 +159,8 @@ export class OnlyDNSClient {
    * Create a new DNS domain.
    */
   async createDomain(domain: string): Promise<void> {
-    await this.request<void>('POST', '/dns', undefined, { domain });
+    const cleanDomain = normalizeDomain(domain);
+    await this.request<void>('POST', '/dns', undefined, { domain: cleanDomain });
   }
 
   /**
@@ -165,24 +171,37 @@ export class OnlyDNSClient {
       offset: options.offset,
       limit: options.limit,
     });
-    return Array.isArray(res) ? res : [];
+    return Array.isArray(res) ? res.map(normalizeDomain) : [];
   }
 
   /**
    * Get all DNS records for a specific domain name.
    */
   async getRecords(domainName: string): Promise<DNSRecord[]> {
-    const encoded = encodeURIComponent(domainName);
+    const cleanDomain = normalizeDomain(domainName);
+    const encoded = encodeURIComponent(cleanDomain);
     const res = await this.request<DNSRecord[]>('GET', `/dns/${encoded}/records`);
-    return Array.isArray(res) ? res : [];
+    if (!Array.isArray(res)) return [];
+    return res.map((r) => ({
+      ...r,
+      name: normalizeRecordName(r.name, cleanDomain),
+      type: normalizeRecordType(r.type),
+    }));
   }
 
   /**
    * Replace all DNS records on a domain (atomic bulk replace).
+   * Ensures all record names end with a trailing dot as required by the API.
    */
   async replaceRecords(domainName: string, records: DNSRecord[]): Promise<void> {
-    const encoded = encodeURIComponent(domainName);
-    await this.request<void>('PUT', `/dns/${encoded}/records`, undefined, records);
+    const cleanDomain = normalizeDomain(domainName);
+    const encoded = encodeURIComponent(cleanDomain);
+    const normalizedRecords = records.map((r) => ({
+      ...r,
+      name: normalizeRecordName(r.name, cleanDomain),
+      type: normalizeRecordType(r.type),
+    }));
+    await this.request<void>('PUT', `/dns/${encoded}/records`, undefined, normalizedRecords);
   }
 
   // ---------------------------------------------------------------------------
@@ -202,38 +221,42 @@ export class OnlyDNSClient {
     ttl: number = 300
   ): Promise<DNSRecord[]> {
     let domain: string;
-    let recName: string;
-    let recType: string;
+    let rawName: string;
+    let recType: RecordType;
     let recValues: string[];
     let recTtl: number;
 
     if (typeof domainNameOrOptions === 'object') {
       domain = domainNameOrOptions.domainName;
-      recName = domainNameOrOptions.name;
-      recType = String(domainNameOrOptions.type).toUpperCase();
+      rawName = domainNameOrOptions.name;
+      recType = normalizeRecordType(domainNameOrOptions.type);
       recValues = Array.isArray(domainNameOrOptions.records)
         ? domainNameOrOptions.records
         : [domainNameOrOptions.records];
       recTtl = domainNameOrOptions.ttl ?? 300;
     } else {
       domain = domainNameOrOptions;
-      recName = name || '';
-      recType = String(type).toUpperCase();
+      rawName = name || '';
+      recType = normalizeRecordType(type || 'A');
       recValues = Array.isArray(records) ? records : [records || ''];
       recTtl = ttl;
     }
 
-    const currentRecords = await this.getRecords(domain);
+    const cleanDomain = normalizeDomain(domain);
+    const targetFqdn = normalizeRecordName(rawName, cleanDomain);
+    const currentRecords = await this.getRecords(cleanDomain);
     let found = false;
 
     for (const r of currentRecords) {
-      if (r.name.toLowerCase() === recName.toLowerCase() && String(r.type).toUpperCase() === recType) {
+      const rFqdn = normalizeRecordName(r.name, cleanDomain);
+      if (rFqdn === targetFqdn && normalizeRecordType(r.type) === recType) {
         for (const v of recValues) {
           if (!r.records.includes(v)) {
             r.records.push(v);
           }
         }
         r.ttl = recTtl;
+        r.name = targetFqdn;
         found = true;
         break;
       }
@@ -241,14 +264,14 @@ export class OnlyDNSClient {
 
     if (!found) {
       currentRecords.push({
-        name: recName,
+        name: targetFqdn,
         type: recType,
         ttl: recTtl,
         records: recValues,
       });
     }
 
-    await this.replaceRecords(domain, currentRecords);
+    await this.replaceRecords(cleanDomain, currentRecords);
     return currentRecords;
   }
 
@@ -262,43 +285,48 @@ export class OnlyDNSClient {
     value?: string
   ): Promise<DNSRecord[]> {
     let domain: string;
-    let recName: string;
-    let recType: string | undefined;
+    let rawName: string;
+    let recType: RecordType | undefined;
     let recValue: string | undefined;
 
     if (typeof domainNameOrOptions === 'object') {
       domain = domainNameOrOptions.domainName;
-      recName = domainNameOrOptions.name;
-      recType = domainNameOrOptions.type ? String(domainNameOrOptions.type).toUpperCase() : undefined;
+      rawName = domainNameOrOptions.name;
+      recType = domainNameOrOptions.type ? normalizeRecordType(domainNameOrOptions.type) : undefined;
       recValue = domainNameOrOptions.value;
     } else {
       domain = domainNameOrOptions;
-      recName = name || '';
-      recType = type ? String(type).toUpperCase() : undefined;
+      rawName = name || '';
+      recType = type ? normalizeRecordType(type) : undefined;
       recValue = value;
     }
 
-    const currentRecords = await this.getRecords(domain);
+    const cleanDomain = normalizeDomain(domain);
+    const targetFqdn = normalizeRecordName(rawName, cleanDomain);
+    const currentRecords = await this.getRecords(cleanDomain);
     const updatedRecords: DNSRecord[] = [];
 
     for (const r of currentRecords) {
-      const nameMatch = r.name.toLowerCase() === recName.toLowerCase();
-      const typeMatch = !recType || String(r.type).toUpperCase() === recType;
+      const rFqdn = normalizeRecordName(r.name, cleanDomain);
+      const nameMatch = rFqdn === targetFqdn;
+      const typeMatch = !recType || normalizeRecordType(r.type) === recType;
 
       if (nameMatch && typeMatch) {
         if (recValue !== undefined) {
           r.records = r.records.filter((v) => v !== recValue);
           if (r.records.length > 0) {
+            r.name = rFqdn;
             updatedRecords.push(r);
           }
         }
-        // If recValue is not provided, record is omitted entirely
+        // If recValue is not provided, record is omitted entirely (deleted)
       } else {
+        r.name = rFqdn;
         updatedRecords.push(r);
       }
     }
 
-    await this.replaceRecords(domain, updatedRecords);
+    await this.replaceRecords(cleanDomain, updatedRecords);
     return updatedRecords;
   }
 
@@ -312,14 +340,18 @@ export class OnlyDNSClient {
     records: string | string[],
     ttl?: number
   ): Promise<DNSRecord[]> {
-    const recType = String(type).toUpperCase();
+    const cleanDomain = normalizeDomain(domainName);
+    const targetFqdn = normalizeRecordName(name, cleanDomain);
+    const recType = normalizeRecordType(type);
     const recValues = Array.isArray(records) ? records : [records];
-    const currentRecords = await this.getRecords(domainName);
+    const currentRecords = await this.getRecords(cleanDomain);
     let found = false;
 
     for (const r of currentRecords) {
-      if (r.name.toLowerCase() === name.toLowerCase() && String(r.type).toUpperCase() === recType) {
+      const rFqdn = normalizeRecordName(r.name, cleanDomain);
+      if (rFqdn === targetFqdn && normalizeRecordType(r.type) === recType) {
         r.records = recValues;
+        r.name = targetFqdn;
         if (ttl !== undefined) {
           r.ttl = ttl;
         }
@@ -330,14 +362,14 @@ export class OnlyDNSClient {
 
     if (!found) {
       currentRecords.push({
-        name,
+        name: targetFqdn,
         type: recType,
         ttl: ttl ?? 300,
         records: recValues,
       });
     }
 
-    await this.replaceRecords(domainName, currentRecords);
+    await this.replaceRecords(cleanDomain, currentRecords);
     return currentRecords;
   }
 
@@ -350,16 +382,21 @@ export class OnlyDNSClient {
     type?: RecordType | string,
     value?: string
   ): Promise<DNSRecord[]> {
-    const records = await this.getRecords(domainName);
-    const rType = type ? String(type).toUpperCase() : undefined;
-    const rName = name ? name.trim().toLowerCase() : undefined;
+    const cleanDomain = normalizeDomain(domainName);
+    const records = await this.getRecords(cleanDomain);
+    const rType = type ? normalizeRecordType(type) : undefined;
+    const rName = name ? name.trim().toLowerCase().replace(/\.+$/, '') : undefined;
     const rVal = value ? value.trim().toLowerCase() : undefined;
 
     return records.filter((r) => {
-      if (rName !== undefined && !r.name.toLowerCase().includes(rName)) {
-        return false;
+      if (rName !== undefined) {
+        const cleanRName = r.name.toLowerCase().replace(/\.+$/, '');
+        const targetFqdn = normalizeRecordName(rName, cleanDomain).replace(/\.+$/, '');
+        if (cleanRName !== targetFqdn && !cleanRName.includes(rName)) {
+          return false;
+        }
       }
-      if (rType !== undefined && String(r.type).toUpperCase() !== rType) {
+      if (rType !== undefined && normalizeRecordType(r.type) !== rType) {
         return false;
       }
       if (rVal !== undefined) {
@@ -407,7 +444,8 @@ export class OnlyDNSClient {
    * Delete all TSIG keys associated with a domain.
    */
   async deleteDomainTsig(domainName: string): Promise<void> {
-    const encoded = encodeURIComponent(domainName);
+    const cleanDomain = normalizeDomain(domainName);
+    const encoded = encodeURIComponent(cleanDomain);
     await this.request<void>('DELETE', `/dns/${encoded}/tsig`);
   }
 
@@ -420,7 +458,8 @@ export class OnlyDNSClient {
     allowAxfr: boolean,
     allowDnsUpdate: boolean
   ): Promise<void> {
-    const encodedDomain = encodeURIComponent(domainName);
+    const cleanDomain = normalizeDomain(domainName);
+    const encodedDomain = encodeURIComponent(cleanDomain);
     const encodedKey = encodeURIComponent(keyName);
     await this.request<void>('PATCH', `/dns/${encodedDomain}/tsig/${encodedKey}`, undefined, {
       allowAxfr: Boolean(allowAxfr),
@@ -436,7 +475,8 @@ export class OnlyDNSClient {
    * Get DNSSEC status and DS keys for a domain.
    */
   async getDnssecStatus(domainName: string): Promise<DNSSECStatus> {
-    const encoded = encodeURIComponent(domainName);
+    const cleanDomain = normalizeDomain(domainName);
+    const encoded = encodeURIComponent(cleanDomain);
     const res = await this.request<DNSSECStatus>('GET', `/dns/${encoded}/dnssec`);
     return res || { enabled: false, keys: [] };
   }
@@ -445,7 +485,8 @@ export class OnlyDNSClient {
    * Enable DNSSEC for a domain.
    */
   async enableDnssec(domainName: string): Promise<void> {
-    const encoded = encodeURIComponent(domainName);
+    const cleanDomain = normalizeDomain(domainName);
+    const encoded = encodeURIComponent(cleanDomain);
     await this.request<void>('POST', `/dns/${encoded}/dnssec`);
   }
 
@@ -453,7 +494,8 @@ export class OnlyDNSClient {
    * Disable DNSSEC for a domain.
    */
   async disableDnssec(domainName: string): Promise<void> {
-    const encoded = encodeURIComponent(domainName);
+    const cleanDomain = normalizeDomain(domainName);
+    const encoded = encodeURIComponent(cleanDomain);
     await this.request<void>('DELETE', `/dns/${encoded}/dnssec`);
   }
 }

@@ -1,7 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OnlyDNSClient } from '../dist/client.js';
+import { OnlyDNSClient, normalizeDomain, normalizeRecordName, normalizeRecordType } from '../dist/index.js';
 import { AuthenticationError, NotFoundError, ValidationError } from '../dist/errors.js';
+
+test('Normalization utilities enforce trailing dots for DNS record names and strip trailing dots for domains', () => {
+  assert.equal(normalizeDomain('EXAMPLE.COM.'), 'example.com');
+  assert.equal(normalizeDomain('  sub.example.com.  '), 'sub.example.com');
+
+  assert.equal(normalizeRecordName('@', 'example.com'), 'example.com.');
+  assert.equal(normalizeRecordName('', 'example.com'), 'example.com.');
+  assert.equal(normalizeRecordName('www', 'example.com'), 'www.example.com.');
+  assert.equal(normalizeRecordName('www.', 'example.com'), 'www.example.com.');
+  assert.equal(normalizeRecordName('www.example.com', 'example.com'), 'www.example.com.');
+  assert.equal(normalizeRecordName('www.example.com.', 'example.com'), 'www.example.com.');
+  assert.equal(normalizeRecordName('api.v1', 'example.com.'), 'api.v1.example.com.');
+
+  assert.equal(normalizeRecordType('a'), 'A');
+  assert.equal(normalizeRecordType('cname'), 'CNAME');
+});
 
 test('OnlyDNSClient constructor throws without token', () => {
   const origEnv = process.env.ONLYDNS_API_KEY;
@@ -29,7 +45,7 @@ test('listDomains parses response correctly', async () => {
   assert.deepEqual(domains, ['example.com', 'example.net']);
 });
 
-test('addRecord helper merges existing values and updates TTL', async () => {
+test('addRecord helper merges existing values, normalizes names to FQDN with trailing dot, and updates TTL', async () => {
   let putPayload = null;
 
   const mockFetch = async (url, opts) => {
@@ -39,7 +55,7 @@ test('addRecord helper merges existing values and updates TTL', async () => {
         ok: true,
         text: async () =>
           JSON.stringify([
-            { name: 'mail', type: 'A', ttl: 300, records: ['192.0.2.10'] },
+            { name: 'mail.example.com.', type: 'A', ttl: 300, records: ['192.0.2.10'] },
           ]),
       };
     }
@@ -58,12 +74,13 @@ test('addRecord helper merges existing values and updates TTL', async () => {
   const updated = await client.addRecord('example.com', 'mail', 'A', '192.0.2.11', 600);
 
   assert.equal(updated.length, 1);
+  assert.equal(updated[0].name, 'mail.example.com.');
   assert.deepEqual(updated[0].records, ['192.0.2.10', '192.0.2.11']);
   assert.equal(updated[0].ttl, 600);
   assert.deepEqual(putPayload, updated);
 });
 
-test('removeRecord helper removes specified value', async () => {
+test('removeRecord helper removes specified value with normalized FQDN', async () => {
   let putPayload = null;
 
   const mockFetch = async (url, opts) => {
@@ -73,8 +90,8 @@ test('removeRecord helper removes specified value', async () => {
         ok: true,
         text: async () =>
           JSON.stringify([
-            { name: 'api', type: 'A', ttl: 300, records: ['1.1.1.1', '2.2.2.2'] },
-            { name: 'web', type: 'A', ttl: 300, records: ['3.3.3.3'] },
+            { name: 'api.example.com.', type: 'A', ttl: 300, records: ['1.1.1.1', '2.2.2.2'] },
+            { name: 'web.example.com.', type: 'A', ttl: 300, records: ['3.3.3.3'] },
           ]),
       };
     }
@@ -93,7 +110,9 @@ test('removeRecord helper removes specified value', async () => {
   const updated = await client.removeRecord('example.com', 'api', 'A', '1.1.1.1');
 
   assert.equal(updated.length, 2);
+  assert.equal(updated[0].name, 'api.example.com.');
   assert.deepEqual(updated[0].records, ['2.2.2.2']);
+  assert.equal(updated[1].name, 'web.example.com.');
   assert.deepEqual(putPayload, updated);
 });
 
