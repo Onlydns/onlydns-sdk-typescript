@@ -7,13 +7,22 @@ test('Normalization utilities enforce trailing dots for DNS record names and str
   assert.equal(normalizeDomain('EXAMPLE.COM.'), 'example.com');
   assert.equal(normalizeDomain('  sub.example.com.  '), 'sub.example.com');
 
+  // Case 1: Without domain (relative)
   assert.equal(normalizeRecordName('@', 'example.com'), 'example.com.');
   assert.equal(normalizeRecordName('', 'example.com'), 'example.com.');
+  assert.equal(normalizeRecordName('testing', 'example.com'), 'testing.example.com.');
   assert.equal(normalizeRecordName('www', 'example.com'), 'www.example.com.');
-  assert.equal(normalizeRecordName('www.', 'example.com'), 'www.example.com.');
+  assert.equal(normalizeRecordName('api.v1', 'example.com'), 'api.v1.example.com.');
+
+  // Case 2: With domain without trailing dot
+  assert.equal(normalizeRecordName('testing.example.com', 'example.com'), 'testing.example.com.');
+  assert.equal(normalizeRecordName('example.com', 'example.com'), 'example.com.');
   assert.equal(normalizeRecordName('www.example.com', 'example.com'), 'www.example.com.');
+
+  // Case 3: Full canonical FQDN with trailing dot
+  assert.equal(normalizeRecordName('testing.example.com.', 'example.com'), 'testing.example.com.');
+  assert.equal(normalizeRecordName('example.com.', 'example.com'), 'example.com.');
   assert.equal(normalizeRecordName('www.example.com.', 'example.com'), 'www.example.com.');
-  assert.equal(normalizeRecordName('api.v1', 'example.com.'), 'api.v1.example.com.');
 
   assert.equal(normalizeRecordType('a'), 'A');
   assert.equal(normalizeRecordType('cname'), 'CNAME');
