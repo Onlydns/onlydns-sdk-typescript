@@ -118,12 +118,18 @@ export interface CreateTsigKeyOptions {
 }
 
 /**
- * TSIG domain permissions update payload.
+ * TSIG domain permissions update payload and response.
  */
 export interface DomainTsigPermissions {
   allowAxfr: boolean;
   allowDnsUpdate: boolean;
+  subdomains?: string[];
 }
+
+/**
+ * Response for domain TSIG permissions mapping key names to permissions.
+ */
+export type DomainTsigKeysResponse = Record<string, DomainTsigPermissions>;
 
 /**
  * Pagination options for listing domains.

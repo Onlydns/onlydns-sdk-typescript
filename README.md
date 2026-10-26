@@ -63,8 +63,15 @@ const tsigKeys = await client.getTsigKeys();
 const newKey = await client.createTsigKey({ algorithm: 'hmac-sha256' });
 console.log('Created TSIG key:', newKey.name);
 
-// Update Domain TSIG permissions
+// Update Domain TSIG permissions (full zone access)
 await client.updateDomainTsig('example.com', newKey.name, true, true);
+
+// Or restrict dynamic DNS updates to specific subdomains (e.g. ACME challenge)
+await client.updateDomainTsig('example.com', newKey.name, false, true, ['_acme_challenge']);
+
+// Fetch domain TSIG permissions
+const domainTsig = await client.getDomainTsig('example.com');
+console.log('Domain TSIG Permissions:', domainTsig);
 
 // Delete all TSIG keys on a domain
 await client.deleteDomainTsig('example.com');

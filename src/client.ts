@@ -17,6 +17,7 @@ import type {
   DNSRecord,
   DNSSECStatus,
   DNSTsigKeysResponse,
+  DomainTsigPermissions,
   ListDomainsOptions,
   OnlyDNSClientOptions,
   RecordType,
@@ -441,6 +442,16 @@ export class OnlyDNSClient {
   }
 
   /**
+   * Get TSIG keys and permissions configured on a domain.
+   */
+  async getDomainTsig(domainName: string): Promise<Record<string, DomainTsigPermissions>> {
+    const cleanDomain = normalizeDomain(domainName);
+    const encoded = encodeURIComponent(cleanDomain);
+    const res = await this.request<Record<string, DomainTsigPermissions>>('GET', `/dns/${encoded}/tsig`);
+    return res || {};
+  }
+
+  /**
    * Delete all TSIG keys associated with a domain.
    */
   async deleteDomainTsig(domainName: string): Promise<void> {
@@ -450,21 +461,26 @@ export class OnlyDNSClient {
   }
 
   /**
-   * Update TSIG key permissions (AXFR and DNS updates) on a domain.
+   * Update TSIG key permissions (AXFR, DNS updates, and optional subdomain restrictions) on a domain.
    */
   async updateDomainTsig(
     domainName: string,
     keyName: string,
     allowAxfr: boolean,
-    allowDnsUpdate: boolean
+    allowDnsUpdate: boolean,
+    subdomains?: string[]
   ): Promise<void> {
     const cleanDomain = normalizeDomain(domainName);
     const encodedDomain = encodeURIComponent(cleanDomain);
     const encodedKey = encodeURIComponent(keyName);
-    await this.request<void>('PATCH', `/dns/${encodedDomain}/tsig/${encodedKey}`, undefined, {
+    const body: Record<string, unknown> = {
       allowAxfr: Boolean(allowAxfr),
       allowDnsUpdate: Boolean(allowDnsUpdate),
-    });
+    };
+    if (subdomains !== undefined && subdomains !== null) {
+      body.subdomains = subdomains;
+    }
+    await this.request<void>('PATCH', `/dns/${encodedDomain}/tsig/${encodedKey}`, undefined, body);
   }
 
   // ---------------------------------------------------------------------------

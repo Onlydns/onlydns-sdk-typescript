@@ -30,6 +30,7 @@ export type {
   DNSTsigKeysResponse,
   CreateTsigKeyOptions,
   DomainTsigPermissions,
+  DomainTsigKeysResponse,
   ListDomainsOptions,
   OnlyDNSClientOptions,
   AddRecordOptions,

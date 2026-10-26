@@ -159,8 +159,11 @@ test('findRecords filters by name, type, and value with substring matching', asy
 });
 
 test('TSIG operations work as expected', async () => {
+  let patchCalls = [];
+  let deleteCalls = [];
+
   const mockFetch = async (url, opts) => {
-    if (opts.method === 'POST') {
+    if (opts.method === 'POST' && url.endsWith('/dns/tsig')) {
       return {
         status: 200,
         ok: true,
@@ -172,13 +175,69 @@ test('TSIG operations work as expected', async () => {
           }),
       };
     }
-    throw new Error('Unexpected call');
+    if (opts.method === 'GET' && url.endsWith('/dns/example.com/tsig')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            'key-123': {
+              allowAxfr: false,
+              allowDnsUpdate: true,
+              subdomains: ['_acme_challenge'],
+            },
+          }),
+      };
+    }
+    if (opts.method === 'PATCH' && url.includes('/dns/example.com/tsig/')) {
+      patchCalls.push({ url, body: JSON.parse(opts.body) });
+      return {
+        status: 204,
+        ok: true,
+        text: async () => '',
+      };
+    }
+    if (opts.method === 'DELETE' && url.endsWith('/dns/example.com/tsig')) {
+      deleteCalls.push(url);
+      return {
+        status: 204,
+        ok: true,
+        text: async () => '',
+      };
+    }
+    throw new Error('Unexpected call: ' + opts.method + ' ' + url);
   };
 
   const client = new OnlyDNSClient({ apiToken: 'test_token', fetch: mockFetch });
   const key = await client.createTsigKey({ algorithm: 'hmac-sha256' });
   assert.equal(key.name, 'key-123');
   assert.equal(key.algorithm, 'hmac-sha256');
+
+  // Configure full-zone TSIG
+  await client.updateDomainTsig('example.com', 'key-123', true, true);
+  assert.equal(patchCalls.length, 1);
+  assert.deepEqual(patchCalls[0].body, { allowAxfr: true, allowDnsUpdate: true });
+
+  // Configure subdomain-restricted TSIG
+  await client.updateDomainTsig('example.com', 'key-123', false, true, ['_acme_challenge', 'dynamic']);
+  assert.equal(patchCalls.length, 2);
+  assert.deepEqual(patchCalls[1].body, {
+    allowAxfr: false,
+    allowDnsUpdate: true,
+    subdomains: ['_acme_challenge', 'dynamic'],
+  });
+
+  // Get domain TSIG
+  const domainTsig = await client.getDomainTsig('example.com');
+  assert.deepEqual(domainTsig['key-123'], {
+    allowAxfr: false,
+    allowDnsUpdate: true,
+    subdomains: ['_acme_challenge'],
+  });
+
+  // Delete domain TSIG
+  await client.deleteDomainTsig('example.com');
+  assert.equal(deleteCalls.length, 1);
 });
 
 test('createDomain sends correct payload', async () => {
