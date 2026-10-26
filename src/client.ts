@@ -79,7 +79,7 @@ export class OnlyDNSClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiToken}`,
       Accept: 'application/json',
-      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.3',
+      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.4',
     };
 
     if (body !== undefined) {
