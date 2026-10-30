@@ -40,8 +40,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/onlydns/onlydns-sdk-typescript.git"
+    "url": "https://github.com/Onlydns/onlydns-sdk-typescript.git"
   },
+  "bugs": {
+    "url": "https://github.com/Onlydns/onlydns-sdk-typescript/issues"
+  },
+  "homepage": "https://github.com/Onlydns/onlydns-sdk-typescript#readme",
   "devDependencies": {
     "typescript": "^5.0.0"
   }
