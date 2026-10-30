@@ -1,8 +1,12 @@
 # OnlyDNS TypeScript / JavaScript SDK
 
-Official TypeScript & JavaScript SDK for the [OnlyDNS System API](https://api-docs.onlydns.com/).
+Official TypeScript & JavaScript SDK for [OnlyDNS](https://www.onlydns.com) to programmatically manage authoritative Anycast DNS zones, records, 1-click DNSSEC, and RFC 2136 TSIG keys. Learn more in the [OnlyDNS Technical How-To Guides](https://www.onlydns.com/howto/).
 
-Built for high-utility DNS management across Node.js, Bun, Deno, Cloudflare Workers, and autonomous AI Agent environments (Model Context Protocol, Vercel AI SDK, LangChain.js, OpenAI tool calling).
+```bash
+npm install @onlydns/sdk
+```
+
+**Authentication Environment Variable:** `ONLYDNS_API_TOKEN`.
 
 ## Features
 
@@ -30,7 +34,7 @@ bun add @onlydns/sdk
 ```typescript
 import { OnlyDNSClient } from '@onlydns/sdk';
 
-// Initialize client (falls back to process.env.ONLYDNS_API_KEY)
+// Initialize client (falls back to process.env.ONLYDNS_API_TOKEN)
 const client = new OnlyDNSClient({
   apiToken: 'your_api_token_here',
 });

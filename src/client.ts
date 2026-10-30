@@ -41,12 +41,11 @@ export class OnlyDNSClient {
     const globalProcess = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
     const token =
       options.apiToken ||
-      globalProcess?.env?.ONLYDNS_API_KEY ||
       globalProcess?.env?.ONLYDNS_API_TOKEN;
 
     if (!token) {
       throw new AuthenticationError(
-        'API token is required. Pass apiToken or set the ONLYDNS_API_KEY environment variable.'
+        'API token is required. Pass apiToken or set the ONLYDNS_API_TOKEN environment variable.'
       );
     }
 
@@ -79,7 +78,7 @@ export class OnlyDNSClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiToken}`,
       Accept: 'application/json',
-      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.4',
+      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.5',
     };
 
     if (body !== undefined) {

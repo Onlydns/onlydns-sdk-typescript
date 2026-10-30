@@ -145,7 +145,7 @@ export interface ListDomainsOptions {
 export interface OnlyDNSClientOptions {
   /**
    * OnlyDNS API Bearer token.
-   * If omitted, falls back to ONLYDNS_API_KEY or ONLYDNS_API_TOKEN environment variable.
+   * If omitted, falls back to ONLYDNS_API_TOKEN environment variable.
    */
   apiToken?: string;
 

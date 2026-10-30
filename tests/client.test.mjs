@@ -29,13 +29,12 @@ test('Normalization utilities enforce trailing dots for DNS record names and str
 });
 
 test('OnlyDNSClient constructor throws without token', () => {
-  const origEnv = process.env.ONLYDNS_API_KEY;
-  delete process.env.ONLYDNS_API_KEY;
+  const origEnv = process.env.ONLYDNS_API_TOKEN;
   delete process.env.ONLYDNS_API_TOKEN;
 
   assert.throws(() => new OnlyDNSClient(), AuthenticationError);
 
-  if (origEnv) process.env.ONLYDNS_API_KEY = origEnv;
+  if (origEnv !== undefined) process.env.ONLYDNS_API_TOKEN = origEnv;
 });
 
 test('listDomains parses response correctly', async () => {
