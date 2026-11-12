@@ -305,3 +305,198 @@ test('DNSSEC operations work as expected', async () => {
   await client.enableDnssec('example.com');
   await client.disableDnssec('example.com');
 });
+
+test('Account and custom OIDC SSO operations work as expected', async () => {
+  const requests = [];
+  const mockFetch = async (url, opts) => {
+    requests.push({ url, method: opts.method, body: opts.body ? JSON.parse(opts.body) : null });
+
+    if (opts.method === 'GET' && url.endsWith('/account')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            accountId: '018f1234-5678-7000-8000-000000000001',
+            activeAt: '2024-01-01T00:00:00+00:00',
+            companyName: 'Acme Corporation',
+            firstName: 'Jane',
+            lastName: 'Doe',
+            address: {
+              street1: '123 Innovation Way',
+              city: 'Austin',
+              state: 'TX',
+              countryId: 'US',
+              postalCode: '78701',
+            },
+            package: {
+              id: '018f1234-5678-7000-8000-000000000002',
+              description: 'Enterprise Tier',
+              amount: 49.99,
+              features: {
+                domains: 50,
+                records: 5000,
+                queries: 1000000,
+                dnssec: true,
+                tsig: true,
+                proxy: true,
+                customSSO: true,
+              },
+            },
+          }),
+      };
+    }
+
+    if (opts.method === 'GET' && url.endsWith('/account/billing')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            accountId: '018f1234-5678-7000-8000-000000000001',
+            currency: 'USD',
+            amountDue: { value: '49.00', currency: 'USD' },
+            pastDueAmount: { value: '0.00', currency: 'USD' },
+            pastDue: false,
+            suspended: false,
+            suspendedForNonPayment: false,
+            paymentRequired: true,
+            payable: true,
+          }),
+      };
+    }
+
+    if (opts.method === 'GET' && url.endsWith('/account/metrics')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            accountId: '018f1234-5678-7000-8000-000000000001',
+            package: { id: 'pro', description: 'Professional DNS' },
+            usage: {
+              domains: { current: 5, limit: 25 },
+              records: { current: 42, limit: 500 },
+              queries: { current: 1500, limit: 100000 },
+              dnssec: { current: 2, enabled: true },
+              tsigKeys: { current: 1, limit: 10 },
+              changesLast24Hours: { current: 3, limit: 100 },
+              apiRequestsPerMinute: { current: 8, limit: 60 },
+              apiTokens: { current: 2, limit: 5 },
+            },
+          }),
+      };
+    }
+
+    if (opts.method === 'GET' && url.endsWith('/account/oidc')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            configured: true,
+            accountId: '018f1234-5678-7000-8000-000000000001',
+            discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
+            clientId: 'client-123',
+            clientSecretMasked: 'secr*****',
+            enforceSso: false,
+            breakGlassAdminsCount: 1,
+            canEnforceSso: true,
+            nonCompliantUsers: [],
+          }),
+      };
+    }
+
+    if (opts.method === 'POST' && url.endsWith('/account/oidc')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            configured: true,
+            accountId: '018f1234-5678-7000-8000-000000000001',
+            discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
+            clientId: 'client-123',
+            clientSecretMasked: 'secr*****',
+            enforceSso: true,
+          }),
+      };
+    }
+
+    if (opts.method === 'DELETE' && url.endsWith('/account/oidc')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            message: 'OIDC configuration removed successfully',
+          }),
+      };
+    }
+
+    if (opts.method === 'POST' && url.endsWith('/account/oidc/test')) {
+      return {
+        status: 200,
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            issuer: 'https://idp.example.com',
+            authorizationEndpoint: 'https://idp.example.com/oauth2/v1/authorize',
+            tokenEndpoint: 'https://idp.example.com/oauth2/v1/token',
+            jwksUri: 'https://idp.example.com/oauth2/v1/keys',
+            userinfoEndpoint: 'https://idp.example.com/oauth2/v1/userinfo',
+          }),
+      };
+    }
+
+    throw new Error('Unexpected call: ' + opts.method + ' ' + url);
+  };
+
+  const client = new OnlyDNSClient({ apiToken: 'test_token', fetch: mockFetch });
+
+  // 1. getAccount
+  const acc = await client.getAccount();
+  assert.equal(acc.accountId, '018f1234-5678-7000-8000-000000000001');
+  assert.equal(acc.companyName, 'Acme Corporation');
+  assert.equal(acc.package?.features.customSSO, true);
+
+  // 1b. getAccountBilling
+  const bill = await client.getAccountBilling();
+  assert.equal(bill.accountId, '018f1234-5678-7000-8000-000000000001');
+  assert.equal(bill.amountDue.value, '49.00');
+  assert.equal(bill.paymentRequired, true);
+
+  // 1c. getAccountMetrics
+  const met = await client.getAccountMetrics();
+  assert.equal(met.accountId, '018f1234-5678-7000-8000-000000000001');
+  assert.equal(met.package?.id, 'pro');
+  assert.equal(met.usage.domains.current, 5);
+  assert.equal(met.usage.records.current, 42);
+  assert.equal(met.usage.dnssec.enabled, true);
+  assert.equal(met.usage.tsigKeys.current, 1);
+
+  // 2. getAccountOidc
+  const oidc = await client.getAccountOidc();
+  assert.equal(oidc.configured, true);
+  assert.equal(oidc.clientId, 'client-123');
+
+  // 3. saveAccountOidc
+  const saved = await client.saveAccountOidc({
+    discoveryUrl: 'https://idp.example.com/.well-known/openid-configuration',
+    clientId: 'client-123',
+    clientSecret: 'secret123',
+    enforceSso: true,
+  });
+  assert.equal(saved.enforceSso, true);
+
+  // 4. testAccountOidc
+  const testRes = await client.testAccountOidc('https://idp.example.com/.well-known/openid-configuration');
+  assert.equal(testRes.success, true);
+  assert.equal(testRes.issuer, 'https://idp.example.com');
+
+  // 5. deleteAccountOidc
+  const delRes = await client.deleteAccountOidc();
+  assert.equal(delRes.success, true);
+});

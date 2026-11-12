@@ -11,9 +11,20 @@ import {
   normalizeRecordType,
 } from './utils.js';
 import type {
+  AccountInfo,
+  AccountMetricsResponse,
+  AccountOidcConfig,
+  AccountOidcDeleteResponse,
+  AccountOidcTestResponse,
   AddRecordOptions,
   APIErrorResponse,
+  APIToken,
+  AuthLoginOptions,
+  AuthResponse,
+  BillingStatusResponse,
+  CreateTokenOptions,
   CreateTsigKeyOptions,
+  CreateUserOptions,
   DNSRecord,
   DNSSECStatus,
   DNSTsigKeysResponse,
@@ -22,8 +33,12 @@ import type {
   OnlyDNSClientOptions,
   RecordType,
   RemoveRecordOptions,
+  SaveAccountOidcOptions,
+  TestAccountOidcOptions,
   TsigAlgorithm,
   TsigKey,
+  UpdateUserOptions,
+  User,
 } from './types.js';
 
 /**
@@ -78,7 +93,7 @@ export class OnlyDNSClient {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiToken}`,
       Accept: 'application/json',
-      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.5',
+      'User-Agent': 'OnlyDNS-TypeScript-SDK/1.0.6',
     };
 
     if (body !== undefined) {
@@ -512,5 +527,172 @@ export class OnlyDNSClient {
     const cleanDomain = normalizeDomain(domainName);
     const encoded = encodeURIComponent(cleanDomain);
     await this.request<void>('DELETE', `/dns/${encoded}/dnssec`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Portal User Management API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * List all portal users for the authenticated account.
+   */
+  async listUsers(): Promise<User[]> {
+    const res = await this.request<User[]>('GET', '/users');
+    return Array.isArray(res) ? res : [];
+  }
+
+  /**
+   * Get details for a specific portal user.
+   */
+  async getUser(userId: string): Promise<User> {
+    const encoded = encodeURIComponent(userId);
+    return this.request<User>('GET', `/users/${encoded}`);
+  }
+
+  /**
+   * Invite / create a new portal user with specific scopes and zone restrictions.
+   */
+  async createUser(options: CreateUserOptions): Promise<User> {
+    return this.request<User>('POST', '/users', undefined, options);
+  }
+
+  /**
+   * Update an existing portal user's assigned scopes, zone restrictions, or permissions.
+   */
+  async updateUser(userId: string, options: UpdateUserOptions): Promise<User> {
+    const encoded = encodeURIComponent(userId);
+    return this.request<User>('PATCH', `/users/${encoded}`, undefined, options);
+  }
+
+  /**
+   * Deactivate a portal user.
+   */
+  async deleteUser(userId: string): Promise<void> {
+    const encoded = encodeURIComponent(userId);
+    await this.request<void>('DELETE', `/users/${encoded}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // API Token Management API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * List all API access tokens for the authenticated account.
+   */
+  async listTokens(): Promise<APIToken[]> {
+    const res = await this.request<APIToken[]>('GET', '/tokens');
+    return Array.isArray(res) ? res : [];
+  }
+
+  /**
+   * Get metadata for a specific API token.
+   */
+  async getToken(tokenId: string): Promise<APIToken> {
+    const encoded = encodeURIComponent(tokenId);
+    return this.request<APIToken>('GET', `/tokens/${encoded}`);
+  }
+
+  /**
+   * Provision a new API access token with scopes, allowed networks, and optional expiration.
+   */
+  async createToken(options: CreateTokenOptions = {}): Promise<APIToken> {
+    return this.request<APIToken>('POST', '/tokens', undefined, options);
+  }
+
+  /**
+   * Revoke / deactivate an API access token.
+   */
+  async deleteToken(tokenId: string): Promise<void> {
+    const encoded = encodeURIComponent(tokenId);
+    await this.request<void>('DELETE', `/tokens/${encoded}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Account & Custom OIDC SSO API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Retrieve account metadata, contact details, and billing package feature entitlements.
+   */
+  async getAccount(): Promise<AccountInfo> {
+    return this.request<AccountInfo>('GET', '/account');
+  }
+
+  /**
+   * Retrieve the account billing status, balances, and non-payment suspension state.
+   */
+  async getAccountBilling(): Promise<BillingStatusResponse> {
+    return this.request<BillingStatusResponse>('GET', '/account/billing');
+  }
+
+  /**
+   * Retrieve real-time account resource usage and plan feature limits.
+   */
+  async getAccountMetrics(): Promise<AccountMetricsResponse> {
+    return this.request<AccountMetricsResponse>('GET', '/account/metrics');
+  }
+
+  /**
+   * Retrieve custom OIDC Single Sign-On configuration, enforcement policy, and non-compliant users.
+   */
+  async getAccountOidc(): Promise<AccountOidcConfig> {
+    return this.request<AccountOidcConfig>('GET', '/account/oidc');
+  }
+
+  /**
+   * Create or update custom OIDC Single Sign-On configuration and enforcement settings.
+   */
+  async saveAccountOidc(options: SaveAccountOidcOptions): Promise<AccountOidcConfig> {
+    return this.request<AccountOidcConfig>('POST', '/account/oidc', undefined, options);
+  }
+
+  /**
+   * Remove custom OIDC Single Sign-On configuration from the account.
+   */
+  async deleteAccountOidc(): Promise<AccountOidcDeleteResponse> {
+    return this.request<AccountOidcDeleteResponse>('DELETE', '/account/oidc');
+  }
+
+  /**
+   * Test OIDC discovery URL reachability and retrieve identity provider endpoint metadata.
+   */
+  async testAccountOidc(options?: TestAccountOidcOptions | string): Promise<AccountOidcTestResponse> {
+    let body: TestAccountOidcOptions | undefined;
+    if (typeof options === 'string') {
+      body = { discoveryUrl: options };
+    } else if (options && typeof options === 'object') {
+      body = options;
+    }
+    return this.request<AccountOidcTestResponse>('POST', '/account/oidc/test', undefined, body);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Authentication & Login API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Authenticate user credentials and receive a short-lived signed JWT API token.
+   */
+  static async login(
+    options: AuthLoginOptions,
+    clientOptions: Partial<OnlyDNSClientOptions> = {}
+  ): Promise<AuthResponse> {
+    const baseUrl = (clientOptions.baseUrl || OnlyDNSClient.DEFAULT_BASE_URL).replace(/\/+$/, '');
+    const fetchFn = clientOptions.fetch || (globalThis.fetch ? globalThis.fetch.bind(globalThis) : fetch);
+
+    const res = await fetchFn(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(options),
+    });
+
+    if (!res.ok) {
+      throw new AuthenticationError('Login failed: Invalid credentials or disabled user account');
+    }
+
+    return (await res.json()) as AuthResponse;
   }
 }

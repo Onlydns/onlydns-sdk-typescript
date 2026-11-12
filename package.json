@@ -1,6 +1,6 @@
 {
   "name": "@onlydns/sdk",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Official TypeScript/JavaScript SDK for OnlyDNS System API (onlydns.com)",
   "author": "OnlyDNS <support@onlydns.com>",
   "license": "MIT",
@@ -47,6 +47,10 @@
   },
   "homepage": "https://github.com/Onlydns/onlydns-sdk-typescript#readme",
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "@types/node": "^20.17.24",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
