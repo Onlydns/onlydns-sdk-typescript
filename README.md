@@ -129,3 +129,10 @@ export const setDnsRecordTool = {
 ## License
 
 MIT License.
+
+## Links
+
+- [Source code](https://github.com/Onlydns/onlydns-sdk-typescript)
+- [Report a problem](https://github.com/Onlydns/onlydns-sdk-typescript/issues)
+- [Website](https://www.onlydns.com)
+
